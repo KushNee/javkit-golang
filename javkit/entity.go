@@ -33,6 +33,7 @@ type Config struct {
 	SurenPref             string
 	FileType              string
 	TitleLen              int
+	Script                string
 }
 
 // JavFile	每部 jav 的结构体
@@ -46,21 +47,21 @@ type JavFile struct {
 type JavInfo struct {
 	License       string
 	LicensePrefix string
-	Title        string
-	FullTitle    string
-	Director     string
-	Release      JavReleaseDate
-	Studio       string
-	Score        string
-	FirstActress string
-	AllActress   []string
-	Length       int
-	ChineseSub   bool
-	VideoName    string
-	CoverUrl     string
-	Review       string // 精彩评论
-	Introduction string // 作品介绍
-	Genres       []string
+	Title         string
+	FullTitle     string
+	Director      string
+	Release       JavReleaseDate
+	Studio        string
+	Score         string
+	FirstActress  string
+	AllActress    []string
+	Length        int
+	ChineseSub    bool
+	VideoName     string
+	CoverUrl      string
+	Review        string // 精彩评论
+	Introduction  string // 作品介绍
+	Genres        []string
 }
 
 type JavReleaseDate struct {

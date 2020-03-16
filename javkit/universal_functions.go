@@ -160,7 +160,7 @@ func renameVideo(info JavInfo, config Config) string {
 // GetJavInfo	获取影片信息
 func GetJavInfo(url string, config Config, r *req.Req) (JavInfo, error) {
 	javInfo := CreateDefaultJavInfo()
-	javlibraryhtml, err := getJavLibraryHtml(url)
+	javlibraryhtml, err := getJavLibraryHtml(url, config)
 	if err != nil {
 		return javInfo, err
 	}
@@ -173,7 +173,7 @@ func GetJavInfo(url string, config Config, r *req.Req) (JavInfo, error) {
 	if JavLibraryCatchError(title) {
 		log.Println(url, " 查询 JavLibrary 失败，等待 5 秒后继续")
 		time.Sleep(time.Second * 5)
-		javlibraryhtml, err = getJavLibraryHtml(url)
+		javlibraryhtml, err = getJavLibraryHtml(url, config)
 		if err != nil {
 			return javInfo, err
 		}
@@ -347,9 +347,9 @@ func getTitleAndLicense(originalTitle string, info *JavInfo, config Config) {
 
 // TODO: cloudflare 的防护突破
 // getJavLibraryHtml	获取 javlibrary 页面信息
-func getJavLibraryHtml(url string) ([]byte, error) {
+func getJavLibraryHtml(url string, config Config) ([]byte, error) {
 
-	args := []string{"/Users/kushnee/Developer/self-scripts/javkit-golang/get_javlibrary.py", "--url=" + url}
+	args := []string{config.Script, "--url=" + url}
 	out, err := exec.Command("/Users/kushnee/.virtualenvs/default/bin/python", args...).Output()
 	return out, err
 }
@@ -422,6 +422,7 @@ func GetConfig(configType string) (Config, error) {
 		config.SurenPref = otherConfig.Key("素人车牌(若有新车牌请自行添加)").String()
 		config.FileType = otherConfig.Key("扫描文件类型").String()
 		config.TitleLen = otherConfig.Key("重命名中的标题长度（50~150）").MustInt()
+		config.Script = otherConfig.Key("python脚本位置").String()
 
 	}
 
