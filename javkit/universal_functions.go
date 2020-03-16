@@ -365,10 +365,10 @@ func makeRequest(config *Config) *req.Req {
 }
 
 // GetConfig 获取 ini 配置并根据类型转换为不同的 config
-func GetConfig(configType string) (Config, error) {
+func GetConfig(configType string, path string) (Config, error) {
 	var config Config
 
-	configSource, err := ini.Load("config.ini")
+	configSource, err := ini.Load(path)
 	if err != nil {
 		return config, err
 	}
