@@ -37,7 +37,7 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(len(javList))
 	for _, jav := range javList {
-		go processJav(config, jav, searchBaseUrl, arzonRequest,wg.Done)
+		go processJav(config, jav, searchBaseUrl, arzonRequest, wg.Done)
 	}
 	wg.Wait()
 
@@ -59,8 +59,11 @@ func processJav(config javkit.Config, jav javkit.JavFile, searchBaseUrl string, 
 	// 移动影片
 	newVideoPath, err := javkit.RenameAndMoveVideo(jav, javInfo, config, newFolderPath)
 	if err != nil {
-		os.RemoveAll(newFolderPath)
 		log.Println(jav.Path, " 移动影片失败，原因：", err)
+		err = os.RemoveAll(newFolderPath)
+		if err != nil {
+			log.Println("删除新建文件夹", newFolderPath, "失败，原因：", err)
+		}
 		return
 	}
 	log.Println(newVideoPath)
