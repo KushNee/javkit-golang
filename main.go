@@ -16,7 +16,7 @@ func main() {
 
 	var path string
 
-	config, err := javkit.GetConfig("javlibrary", "self-config.ini")
+	config, err := javkit.GetConfig("javlibrary", "config.ini")
 	if err != nil {
 		log.Fatalln("无法获取配置，原因：", err)
 	}
