@@ -3,13 +3,16 @@ package javkit
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/imroc/req"
+	"github.com/pelletier/go-toml"
 	"github.com/thoas/go-funk"
 	"gopkg.in/ini.v1"
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -40,7 +43,7 @@ func CreateSymlink(path, newFolderPath string, info JavInfo) {
 }
 
 // CreateNfo	创建相应影片的 nfo 信息
-func CreateNfo(path string, javinfo JavInfo, config Config) {
+func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
 	newName := renameVideo(javinfo, config)
 	nfoFile, _ := os.Create(filepath.Join(path, newName) + ".nfo")
 	defer nfoFile.Close()
@@ -97,19 +100,28 @@ func CreateNfo(path string, javinfo JavInfo, config Config) {
 }
 
 // RenameAndMoveVideo 重命名并移动影片到新的文件夹
-func RenameAndMoveVideo(file JavFile, info JavInfo, config Config, path string) (string, error) {
+func RenameAndMoveVideo(file JavFile, info JavInfo, config IniConfig, path string) (string, error) {
 	prefix := filepath.Ext(file.Path)
 	newName := renameVideo(info, config) + prefix
 	newPath := filepath.Join(path, newName)
 	err := os.Rename(file.Path, newPath)
 	if err != nil {
-		return "", err
+		errString := err.Error()
+		if strings.Contains(errString, "cross-device link") {
+			log.Printf("%s -> %s 是一个跨卷移动操作，请耐心等待\n", file.Path, newPath)
+			err = MoveFile(file.Path, newPath)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
 	}
 	return newPath, nil
 }
 
 // CreateNewFolder	对每个 Jav 创建单独的文件夹
-func CreateNewFolder(file JavFile, info JavInfo, config Config) string {
+func CreateNewFolder(file JavFile, info JavInfo, config IniConfig) string {
 	var newFolder string
 	renameRules := strings.Split(config.RenameFolder, "+")
 	for _, rule := range renameRules {
@@ -138,7 +150,7 @@ func CreateNewFolder(file JavFile, info JavInfo, config Config) string {
 }
 
 // renameVideo	根据配置对影片重命名
-func renameVideo(info JavInfo, config Config) string {
+func renameVideo(info JavInfo, config IniConfig) string {
 	var name string
 
 	renameRules := strings.Split(config.RenameMP4, "+")
@@ -157,8 +169,53 @@ func renameVideo(info JavInfo, config Config) string {
 	return name
 }
 
+// TODO: 使用 arzon 获取所有信息
+//func GetJavInfoByArzon(url string, config IniConfig, arzonRequest *req.Req) (JavInfo, error) {
+//	javInfo := CreateDefaultJavInfo()
+//
+//	searchHtml, err := GetArzonHtml(url, arzonRequest, &config)
+//	if err != nil {
+//		arzonRequest, err = GetArzonCookie(&config)
+//		if err != nil {
+//			return javInfo, err
+//		}
+//		searchHtml, err = GetArzonHtml(url, arzonRequest, &config)
+//	}
+//	if searchHtml != "" && err == nil {
+//		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(searchHtml))
+//
+//		detail,_:=doc.Find("div#item div.pictlist dl.hentry dd.entry-title h2 a").First().Attr("href")
+//		detailUrl:=arzonBaseUrl+detail
+//
+//
+//	}
+//	return javInfo, err
+//}
+
+func getInfoFromArzon(url string, arzonRequest *req.Req, config IniConfig, info *JavInfo) error {
+	detailHtml, err := GetArzonHtml(url, arzonRequest, &config)
+	if err != nil {
+		arzonRequest, err = GetArzonCookie(&config)
+		if err != nil {
+			return err
+		}
+		detailHtml, err = GetArzonHtml(url, arzonRequest, &config)
+	}
+	if detailHtml != "" && err == nil { // 获取相关信息
+		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(detailHtml))
+
+		title := []rune(doc.Find("title").Text())
+		prefix := []rune("Arzon： ")
+		title = title[len(prefix):]
+		changedTitle := string(title)
+		info.Title = changedTitle
+
+	}
+	return err
+}
+
 // GetJavInfo	获取影片信息
-func GetJavInfo(url string, config Config, r *req.Req) (JavInfo, error) {
+func GetJavInfo(url string, config IniConfig, arzonRequest *req.Req) (JavInfo, error) {
 	javInfo := CreateDefaultJavInfo()
 	javlibraryhtml, err := getJavLibraryHtml(url, config)
 	if err != nil {
@@ -215,13 +272,18 @@ func GetJavInfo(url string, config Config, r *req.Req) (JavInfo, error) {
 		javInfo.Director = director
 	}
 
+	// TODO: 获取似乎有问题，需要修改
 	actresses := []string{}
-	doc.Find("div#video_cast table tr td.text span.star a").Each(func(i int, selection *goquery.Selection) {
+	doc.Find("div#video_cast table tbody tr td.text span.cast span.star a").Each(func(i int, selection *goquery.Selection) {
 		actresses = append(actresses, selection.Text())
 	})
-	javInfo.FirstActress = actresses[0]
-	javInfo.AllActress = actresses
+	// 无演员时不添加
+	if len(actresses) > 0 {
+		javInfo.FirstActress = actresses[0]
+		javInfo.AllActress = actresses
+	}
 
+	// TODO: 获取似乎有问题，需要修改
 	genres := []string{}
 	doc.Find("div#video_genres table tr td.text span.genre a").Each(func(i int, selection *goquery.Selection) {
 		genres = append(genres, selection.Text())
@@ -248,7 +310,7 @@ func GetJavInfo(url string, config Config, r *req.Req) (JavInfo, error) {
 	var introduction string
 	if config.IfNfo == "是" && config.IfPlot == "是" {
 		arzonSearchUrl := arzonSearchBaseUrl + javInfo.License
-		introduction, err = getArzonIntroduction(arzonSearchUrl, r, config, &javInfo)
+		introduction, err = getArzonIntroduction(arzonSearchUrl, arzonRequest, config, &javInfo)
 		if err == nil {
 			javInfo.Introduction = introduction
 		}
@@ -258,7 +320,7 @@ func GetJavInfo(url string, config Config, r *req.Req) (JavInfo, error) {
 }
 
 // getArzonIntroduction	获取 arzon 的作品介绍
-func getArzonIntroduction(url string, request *req.Req, config Config, info *JavInfo) (string, error) {
+func getArzonIntroduction(url string, request *req.Req, config IniConfig, info *JavInfo) (string, error) {
 	searchHtml, err := GetArzonHtml(url, request, &config)
 	if err != nil {
 		request, err = GetArzonCookie(&config)
@@ -284,7 +346,7 @@ func getArzonIntroduction(url string, request *req.Req, config Config, info *Jav
 }
 
 // cycleSearchIntroduction	循环查询每个详情页的介绍
-func cycleSearchIntroduction(url string, request *req.Req, config Config) (string, error) {
+func cycleSearchIntroduction(url string, request *req.Req, config IniConfig) (string, error) {
 	detailHtml, err := GetArzonHtml(url, request, &config)
 	if err != nil {
 		request, err = GetArzonCookie(&config)
@@ -305,7 +367,7 @@ func cycleSearchIntroduction(url string, request *req.Req, config Config) (strin
 }
 
 // getTitleAndLicense	对标题和车牌进行获取和清理
-func getTitleAndLicense(originalTitle string, info *JavInfo, config Config) {
+func getTitleAndLicense(originalTitle string, info *JavInfo, config IniConfig) {
 	originalTitle = strings.ReplaceAll(originalTitle, " - JAVLibrary", "")
 	originalTitle = strings.ReplaceAll(originalTitle, "\n", "")
 	originalTitle = strings.ReplaceAll(originalTitle, "&", "和")
@@ -347,15 +409,25 @@ func getTitleAndLicense(originalTitle string, info *JavInfo, config Config) {
 
 // TODO: cloudflare 的防护突破
 // getJavLibraryHtml	获取 javlibrary 页面信息
-func getJavLibraryHtml(url string, config Config) ([]byte, error) {
-
+func getJavLibraryHtml(url string, config IniConfig) ([]byte, error) {
+	var interpreter string
 	args := []string{config.Script, "--url=" + url}
-	out, err := exec.Command("/Users/kushnee/.virtualenvs/default/bin/python", args...).Output()
+	if config.Interpreter == "" {
+		log.Println("未提供 Python 解释器，将尝试调用默认 Python")
+		interpreter = "python"
+	} else {
+		interpreter = config.Interpreter
+	}
+	out, err := exec.Command(interpreter, args...).Output()
 	return out, err
 }
 
+func TestJavLibrary(url string, config IniConfig) ([]byte, error) {
+	return getJavLibraryHtml(url, config)
+}
+
 // makeRequest 生成一个 10 秒超时、装配代理的空 request
-func makeRequest(config *Config) *req.Req {
+func makeRequest(config *IniConfig) *req.Req {
 	request := req.New()
 	request.SetTimeout(time.Second * 10)
 	if config.IfProxy == "是" && config.Proxy != "" {
@@ -364,9 +436,58 @@ func makeRequest(config *Config) *req.Req {
 	return request
 }
 
-// GetConfig 获取 ini 配置并根据类型转换为不同的 config
-func GetConfig(configType string, path string) (Config, error) {
-	var config Config
+// GetConfig	根据配置后缀名使用不同工具加载并统一， **目前不可用**
+func GetConfig(configType string, path string) (interface{}, error) {
+	suffix := filepath.Ext(path)
+	var config interface{}
+	if suffix == ".ini" {
+		config, _ = GetIniConfig(configType, path)
+	} else if suffix == ".toml" {
+		config, _ = getTomlConfig(configType, path)
+	}
+
+	switch realConfig := config.(type) {
+	case IniConfig:
+		fmt.Println(realConfig)
+	case TomlConfig:
+		fmt.Println(realConfig)
+	}
+
+	return config, nil
+}
+
+// getTomlConfig	获取 toml 配置并根据类型转换为不同的 config， **目前不可用**
+func getTomlConfig(configType, path string) (TomlConfig, error) {
+	var config TomlConfig
+
+	if configType == "javlibrary" {
+		file, err := os.Open(path)
+		if err != nil {
+			return config, err
+		}
+		defer file.Close()
+
+		data, err := ioutil.ReadAll(file)
+		if err != nil {
+			return config, err
+		}
+
+		err = toml.Unmarshal(data, &config)
+		if err != nil {
+			return config, err
+		}
+
+		return config, nil
+	} else {
+		err := errors.New(configType + " 类型的配置暂时未支持")
+		return config, err
+	}
+
+}
+
+// GetIniConfig 获取 ini 配置并根据类型转换为不同的 config
+func GetIniConfig(configType string, path string) (IniConfig, error) {
+	var config IniConfig
 
 	configSource, err := ini.Load(path)
 	if err != nil {
@@ -423,6 +544,7 @@ func GetConfig(configType string, path string) (Config, error) {
 		config.FileType = otherConfig.Key("扫描文件类型").String()
 		config.TitleLen = otherConfig.Key("重命名中的标题长度（50~150）").MustInt()
 		config.Script = otherConfig.Key("python脚本位置").String()
+		config.Interpreter = otherConfig.Key("python解释器位置").String()
 
 	}
 
@@ -430,7 +552,7 @@ func GetConfig(configType string, path string) (Config, error) {
 }
 
 // GetArzonCookie	通过 arzon 的成人认证，并返回相应的 request
-func GetArzonCookie(config *Config) (*req.Req, error) {
+func GetArzonCookie(config *IniConfig) (*req.Req, error) {
 	request := req.New()
 	request.SetTimeout(time.Second * 10)
 	if config.IfProxy == "是" && config.Proxy != "" {
@@ -455,7 +577,7 @@ func GetArzonCookie(config *Config) (*req.Req, error) {
 }
 
 // GetArzonHtml	获取 arzon 页面信息
-func GetArzonHtml(url string, arzonRequest *req.Req, config *Config) (string, error) {
+func GetArzonHtml(url string, arzonRequest *req.Req, config *IniConfig) (string, error) {
 
 	response, err := arzonRequest.Get(url)
 	if err != nil {
@@ -472,7 +594,7 @@ func GetArzonHtml(url string, arzonRequest *req.Req, config *Config) (string, er
 }
 
 // DownloadPic	下载封面
-func DownloadPic(errorTimes int, picUrl string, picPath string, config *Config) error {
+func DownloadPic(errorTimes int, picUrl string, picPath string, config *IniConfig) error {
 	request := makeRequest(config)
 	var finalError error
 	for tryTimes := 0; tryTimes < errorTimes; tryTimes++ {
@@ -571,7 +693,7 @@ func cutPic(src image.Image) (image.Image, error) {
 }
 
 // GetJavFromFolder	从给定目录中查找影片，创建 Jav 对象
-func GetJavFromFolder(path string, config Config) []JavFile {
+func GetJavFromFolder(path string, config IniConfig) []JavFile {
 	var javList []JavFile
 	javDic := map[string]int{}
 	typeList := strings.Split(config.FileType, "、")

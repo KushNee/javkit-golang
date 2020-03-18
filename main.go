@@ -12,14 +12,42 @@ import (
 	"sync"
 )
 
+func testMain() {
+
+	// 获取配置
+	config, err := javkit.GetIniConfig("javlibrary", "config.ini")
+	if err != nil {
+		log.Fatalln("无法获取配置，原因：", err)
+	}
+
+	result, err := javkit.TestJavLibrary("http://www.p42u.com/cn/vl_searchbyid.php?keyword=RDT-186", config)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	fmt.Println(string(result))
+
+}
+
 func main() {
 
 	var path string
 
-	config, err := javkit.GetConfig("javlibrary", "config.ini")
+	// 获取配置
+	config, err := javkit.GetIniConfig("javlibrary", "self-config.ini")
 	if err != nil {
 		log.Fatalln("无法获取配置，原因：", err)
 	}
+
+	log.Println("正在进行 arzon 成人认证。。。")
+
+	// 获取 arzon cookie
+	arzonRequest, err := javkit.GetArzonCookie(&config)
+	if err != nil {
+		log.Fatalln("无法完成 arzon 成人验证，请检查网络连接。原因：", err)
+	}
+
+	log.Println("完成 arzon 成人认证。。。")
 
 	inputReader := bufio.NewReader(os.Stdin)
 	fmt.Println("请输入路径：")
@@ -32,8 +60,12 @@ func main() {
 
 	javList := javkit.GetJavFromFolder(path, config)
 
+	if len(javList) == 0 {
+		log.Println("目录内不存在影片")
+		return
+	}
+
 	searchBaseUrl := config.LibraryUrl + "cn/" + "vl_searchbyid.php?keyword="
-	arzonRequest, _ := javkit.GetArzonCookie(&config)
 	var wg sync.WaitGroup
 	wg.Add(len(javList))
 	for _, jav := range javList {
@@ -43,13 +75,14 @@ func main() {
 
 }
 
-func processJav(config javkit.Config, jav javkit.JavFile, searchBaseUrl string, arzonRequest *req.Req, done func()) {
+func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl string, arzonRequest *req.Req, done func()) {
 	defer done()
 	searchUrl := searchBaseUrl + jav.License
 	// 获取 jav 所有需要的信息
 	javInfo, err := javkit.GetJavInfo(searchUrl, config, arzonRequest)
 	if err != nil {
 		log.Println(jav.Path, " 获取信息失败，原因：", err)
+		log.Println("可能与 Python 有关，请使用 Python3.7，并确保安装了所需依赖")
 		return
 	}
 

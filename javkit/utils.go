@@ -2,21 +2,23 @@ package javkit
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
 )
 
 // GetVideoTitle	正则匹配找出番号
-func GetVideoTitle(name string) (string,error) {
+func GetVideoTitle(name string) (string, error) {
 	titleRegexp := regexp.MustCompile(`([a-zA-Z]{2,6})-? ?(\d{2,5})`)
 	titles := titleRegexp.FindStringSubmatch(name)
-	if len(titles) == 0{
-		return "",errors.New(" 不是影片")
+	if len(titles) == 0 {
+		return "", errors.New(" 不是影片")
 	}
 	licensePrefix := strings.ToUpper(titles[1])
 	license := licensePrefix + "-" + titles[2]
-	return license,nil
+	return license, nil
 }
 
 // 创建带默认值的 javinfo
@@ -51,7 +53,7 @@ func CreateDefaultJavInfo() JavInfo {
 
 // Exists 判断路径是否存在
 func Exists(path string) bool {
-	_, err := os.Stat(path)    //os.Stat获取文件信息
+	_, err := os.Stat(path) //os.Stat获取文件信息
 	if err != nil {
 		if os.IsExist(err) {
 			return true
@@ -65,7 +67,31 @@ func Exists(path string) bool {
 func JavLibraryCatchError(title string) bool {
 	if strings.Contains(title, "404") || strings.Contains(title, "502") || strings.Contains(title, "503") {
 		return true
-	}else {
+	} else {
 		return false
 	}
+}
+
+func MoveFile(sourcePath, destPath string) error {
+	inputFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("Couldn't open source file: %s", err)
+	}
+	outputFile, err := os.Create(destPath)
+	if err != nil {
+		inputFile.Close()
+		return fmt.Errorf("Couldn't open dest file: %s", err)
+	}
+	defer outputFile.Close()
+	_, err = io.Copy(outputFile, inputFile)
+	inputFile.Close()
+	if err != nil {
+		return fmt.Errorf("Writing to output file failed: %s", err)
+	}
+	// The copy was successful, so now delete the original file
+	err = os.Remove(sourcePath)
+	if err != nil {
+		return fmt.Errorf("Failed removing original file: %s", err)
+	}
+	return nil
 }

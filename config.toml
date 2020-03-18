@@ -1,0 +1,42 @@
+[colletNfo] # 收集nfo
+skipFolderWithNfo=false # 是否跳过已存在nfo的文件夹？
+collectNfo=true # 是否收集nfo？
+collectReview=true # 是否收集javlibrary上的影评？
+titleStyle="license+whitespace+title" # nfo中title的格式
+chineseSubStyle="中字-"
+
+[moveVideo] # 重命名影片
+renameVideo=true
+renamePattern="license"
+
+[modifyFolder] # 修改文件夹
+mkdir=true # 是否重命名或创建独立文件夹
+folderPattern="license+[+allActress+]" # 新文件夹的格式
+
+[archive] # 归类影片
+archive=true # 是否归类影片？
+ignoreUpperPathError=true # 忽略上层路径报错
+rootPath="" # 归类的根目录,使用绝对路径
+symlink=true # 创建软链接
+archivePattern="allActress" # 归类的标准
+symlinkPath="" # 软链接目录,软链接将归类根目录的上一级作为自己的父目录
+
+[introduction] # 日文介绍
+collectIntroduction=true # 是否抓取日文介绍
+
+[cover] # 下载封面
+downloadCover=true # 是否下载封面海报？
+fanartPattern="video+-fanart.jpg" # dvd封面的格式
+posterPattern="video+-poster.jpg" # 海报的格式
+
+[proxy] # 代理
+useProxy=true # 是否使用代理？
+proxyUrl="127.0.0.1:7890" # 代理ip及端口
+
+[other] # 其他设置
+simpleTradition="简" # 简/繁
+javlibrary="http://www.p42u.com/" # javlibrary网址
+javbus="https://www.javbus.com/" # javbus网址
+suren="LUXU、MIUM、GANA、NTK、ARA、DCV、MAAN、HOI、NAMA、SWEET、SIRO、SCUTE、CUTE、SQB、JKZ" # 素人车牌(若有新车牌请自行添加)
+renameTitleLength=50 #  重命名中的标题长度（50~150）
+pythonScript="" # python脚本位置
