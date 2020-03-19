@@ -287,7 +287,6 @@ func GetJavInfo(url string, config IniConfig, arzonRequest *req.Req, log func(me
 		javInfo.Director = director
 	}
 
-	// TODO: 获取似乎有问题，需要修改
 	actresses := []string{}
 	doc.Find("div#video_cast table tbody tr td.text span.cast span.star a").Each(func(i int, selection *goquery.Selection) {
 		actresses = append(actresses, selection.Text())
@@ -298,7 +297,6 @@ func GetJavInfo(url string, config IniConfig, arzonRequest *req.Req, log func(me
 		javInfo.AllActress = actresses
 	}
 
-	// TODO: 获取似乎有问题，需要修改
 	genres := []string{}
 	doc.Find("div#video_genres table tr td.text span.genre a").Each(func(i int, selection *goquery.Selection) {
 		genres = append(genres, selection.Text())
