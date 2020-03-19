@@ -13,7 +13,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -100,7 +99,7 @@ func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
 }
 
 // RenameAndMoveVideo 重命名并移动影片到新的文件夹
-func RenameAndMoveVideo(file JavFile, info JavInfo, config IniConfig, path string) (string, error) {
+func RenameAndMoveVideo(file JavFile, info JavInfo, config IniConfig, path string, log func(messages ...string)) (string, error) {
 	prefix := filepath.Ext(file.Path)
 	newName := renameVideo(info, config) + prefix
 	newPath := filepath.Join(path, newName)
@@ -108,7 +107,7 @@ func RenameAndMoveVideo(file JavFile, info JavInfo, config IniConfig, path strin
 	if err != nil {
 		errString := err.Error()
 		if strings.Contains(errString, "cross-device link") {
-			log.Printf("%s -> %s 是一个跨卷移动操作，请耐心等待\n", file.Path, newPath)
+			log(file.Path, " -> ", newPath, " 是一个跨卷移动操作，请耐心等待")
 			err = MoveFile(file.Path, newPath)
 			if err != nil {
 				return "", err
@@ -215,22 +214,38 @@ func getInfoFromArzon(url string, arzonRequest *req.Req, config IniConfig, info 
 }
 
 // GetJavInfo	获取影片信息
-func GetJavInfo(url string, config IniConfig, arzonRequest *req.Req) (JavInfo, error) {
+func GetJavInfo(url string, config IniConfig, arzonRequest *req.Req, log func(messages ...string)) (JavInfo, error) {
 	javInfo := CreateDefaultJavInfo()
-	javlibraryhtml, err := getJavLibraryHtml(url, config)
+	javlibraryhtml, err := getJavLibraryHtml(url, config, log)
 	if err != nil {
 		return javInfo, err
 	}
 	javLibrary := string(javlibraryhtml)
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(javLibrary))
 
-	// TODO: 有多个页面待选择的处理
 	title := doc.Find("title").Text()
 
+	if strings.Contains(title, "识别码搜寻结果") {
+		log("未进入详情页，尝试寻找第一个结果继续查找")
+		singleUrl, exist := doc.Find("div#rightcolumn div.videothumblist div.videos div.video").First().Find("a").Attr("href")
+		if exist {
+			url = config.LibraryUrl + "cn/" + singleUrl[2:]
+			javlibraryhtml, err = getJavLibraryHtml(url, config, log)
+			if err != nil {
+				return javInfo, err
+			}
+			javLibrary = string(javlibraryhtml)
+			doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javLibrary))
+			title = doc.Find("title").Text()
+		} else {
+			return javInfo, errors.New("此影片无法在 JavLibrary 中找到")
+		}
+	}
+
 	if JavLibraryCatchError(title) {
-		log.Println(url, " 查询 JavLibrary 失败，等待 5 秒后继续")
+		log(url, " 查询 JavLibrary 失败，等待 5 秒后继续")
 		time.Sleep(time.Second * 5)
-		javlibraryhtml, err = getJavLibraryHtml(url, config)
+		javlibraryhtml, err = getJavLibraryHtml(url, config, log)
 		if err != nil {
 			return javInfo, err
 		}
@@ -409,21 +424,17 @@ func getTitleAndLicense(originalTitle string, info *JavInfo, config IniConfig) {
 
 // TODO: cloudflare 的防护突破
 // getJavLibraryHtml	获取 javlibrary 页面信息
-func getJavLibraryHtml(url string, config IniConfig) ([]byte, error) {
+func getJavLibraryHtml(url string, config IniConfig, log func(messages ...string)) ([]byte, error) {
 	var interpreter string
 	args := []string{config.Script, "--url=" + url}
 	if config.Interpreter == "" {
-		log.Println("未提供 Python 解释器，将尝试调用默认 Python")
+		log("未提供 Python 解释器，将尝试调用默认 Python")
 		interpreter = "python"
 	} else {
 		interpreter = config.Interpreter
 	}
 	out, err := exec.Command(interpreter, args...).Output()
 	return out, err
-}
-
-func TestJavLibrary(url string, config IniConfig) ([]byte, error) {
-	return getJavLibraryHtml(url, config)
 }
 
 // makeRequest 生成一个 10 秒超时、装配代理的空 request
@@ -711,7 +722,7 @@ func GetJavFromFolder(path string, config IniConfig) []JavFile {
 				if ext == "."+videoType && filename[0] != '.' {
 					license, err := GetVideoTitle(filepath.Base(filename))
 					if err != nil {
-						log.Println(filename, err, " 跳过")
+						PrintWithTime(filename, err.Error(), " 跳过")
 						continue
 					}
 					if !funk.Contains(javDic, license) {

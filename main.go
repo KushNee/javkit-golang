@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"github.com/KushNee/javkit-golang/javkit"
+	"github.com/c-bata/go-prompt"
 	"github.com/imroc/req"
 	"log"
 	"os"
@@ -12,34 +12,39 @@ import (
 	"sync"
 )
 
-func testMain() {
-
-	// 获取配置
-	config, err := javkit.GetIniConfig("javlibrary", "config.ini")
-	if err != nil {
-		log.Fatalln("无法获取配置，原因：", err)
-	}
-
-	result, err := javkit.TestJavLibrary("http://www.p42u.com/cn/vl_searchbyid.php?keyword=RDT-186", config)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	fmt.Println(string(result))
-
-}
-
 func main() {
-
-	var path string
 
 	// 获取配置
 	config, err := javkit.GetIniConfig("javlibrary", "self-config.ini")
 	if err != nil {
-		log.Fatalln("无法获取配置，原因：", err)
+		if strings.Contains(err.Error(), "no such file or directory") {
+			javkit.PrintWithTime("当前路径未找到配置文件，请提供配置路径。输入后回车")
+			notFound := true
+			for notFound {
+				configPath := prompt.Input("path > ", javkit.PathCompleter)
+				switch configPath {
+				case "exit":
+					return
+				default:
+					config, err = javkit.GetIniConfig("javlibrary", configPath)
+					if err != nil {
+						if strings.Contains(err.Error(), "no such file or directory") {
+							javkit.PrintWithTime("未找到配置文件，请提供配置路径。输入后回车")
+						} else {
+							javkit.PrintWithTime("加载配置文件失败，原因：", err.Error())
+						}
+						continue
+					}
+					notFound = false
+				}
+			}
+
+		}
 	}
 
-	log.Println("正在进行 arzon 成人认证。。。")
+	javkit.PrintWithTime("加载配置成功")
+
+	javkit.PrintWithTime("正在进行 arzon 成人认证。。。")
 
 	// 获取 arzon cookie
 	arzonRequest, err := javkit.GetArzonCookie(&config)
@@ -47,21 +52,30 @@ func main() {
 		log.Fatalln("无法完成 arzon 成人验证，请检查网络连接。原因：", err)
 	}
 
-	log.Println("完成 arzon 成人认证。。。")
+	javkit.PrintWithTime("完成 arzon 成人认证。。。")
 
-	inputReader := bufio.NewReader(os.Stdin)
-	fmt.Println("请输入路径：")
-	// TODO: 选择路径
-	path, err = inputReader.ReadString('\n')
-	if err != nil {
-		log.Fatalln("获取路径失败，原因：", err)
+	fmt.Println("输入后回车选择路径")
+	pathLoop := true
+	for pathLoop {
+		t := prompt.Input("path > ", javkit.PathCompleter)
+		switch t {
+		case "exit":
+			return
+		case "back":
+			pathLoop = false
+			continue
+		}
+		mainLogin(t, arzonRequest, config)
+
 	}
-	path = strings.Trim(path, "\n")
+}
+
+func mainLogin(path string, arzonRequest *req.Req, config javkit.IniConfig) {
 
 	javList := javkit.GetJavFromFolder(path, config)
 
 	if len(javList) == 0 {
-		log.Println("目录内不存在影片")
+		javkit.PrintWithTime("目录内不存在影片")
 		return
 	}
 
@@ -69,20 +83,25 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(len(javList))
 	for _, jav := range javList {
-		go processJav(config, jav, searchBaseUrl, arzonRequest, wg.Done)
+		standPrint := func(messages ...string) {
+			title := []string{"[", filepath.Base(jav.Path), "]", " "}
+			messages = append(title, messages...)
+			javkit.PrintWithTime(messages...)
+		}
+		go processJav(config, jav, searchBaseUrl, arzonRequest, wg.Done, standPrint)
 	}
 	wg.Wait()
 
 }
 
-func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl string, arzonRequest *req.Req, done func()) {
+func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl string, arzonRequest *req.Req, done func(), log func(messages ...string)) {
 	defer done()
 	searchUrl := searchBaseUrl + jav.License
 	// 获取 jav 所有需要的信息
-	javInfo, err := javkit.GetJavInfo(searchUrl, config, arzonRequest)
+	javInfo, err := javkit.GetJavInfo(searchUrl, config, arzonRequest, log)
 	if err != nil {
-		log.Println(jav.Path, " 获取信息失败，原因：", err)
-		log.Println("可能与 Python 有关，请使用 Python3.7，并确保安装了所需依赖")
+		log(jav.Path, " 获取信息失败，原因：", err.Error())
+		log("可能与 Python 有关，请使用 Python3.7，并确保安装了所需依赖")
 		return
 	}
 
@@ -90,16 +109,16 @@ func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl strin
 	newFolderPath := javkit.CreateNewFolder(jav, javInfo, config)
 
 	// 移动影片
-	newVideoPath, err := javkit.RenameAndMoveVideo(jav, javInfo, config, newFolderPath)
+	newVideoPath, err := javkit.RenameAndMoveVideo(jav, javInfo, config, newFolderPath, log)
 	if err != nil {
-		log.Println(jav.Path, " 移动影片失败，原因：", err)
+		log(jav.Path, " 移动影片失败，原因：", err.Error())
 		err = os.RemoveAll(newFolderPath)
 		if err != nil {
-			log.Println("删除新建文件夹", newFolderPath, "失败，原因：", err)
+			log("删除新建文件夹", newFolderPath, "失败，原因：", err.Error())
 		}
 		return
 	}
-	log.Println(newVideoPath)
+	log(newVideoPath)
 
 	// 创建 nfo
 	if config.IfNfo == "是" {
@@ -122,13 +141,13 @@ func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl strin
 		fanartPath := filepath.Join(newFolderPath, fanartName)
 		err = javkit.DownloadPic(10, javInfo.CoverUrl, fanartPath, &config)
 		if err != nil {
-			log.Println(fanartPath, " 下载图片失败，原因：", err)
+			log(fanartPath, " 下载图片失败，原因：", err.Error())
 			return
 		}
 
 		err = javkit.MakePoster(fanartPath)
 		if err != nil {
-			log.Println(fanartPath, " 生成海报失败，原因：", err)
+			log(fanartPath, " 生成海报失败，原因：", err.Error())
 			return
 		}
 	}
@@ -143,7 +162,7 @@ func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl strin
 	oldPath := filepath.Dir(jav.Path)
 	err = os.RemoveAll(oldPath)
 	if err != nil {
-		log.Println(oldPath, " 删除旧文件夹失败，原因：", err)
+		log(oldPath, " 删除旧文件夹失败，原因：", err.Error())
 		return
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // GetVideoTitle	正则匹配找出番号
@@ -94,4 +95,9 @@ func MoveFile(sourcePath, destPath string) error {
 		return fmt.Errorf("Failed removing original file: %s", err)
 	}
 	return nil
+}
+
+func PrintWithTime(message ...string) {
+	now := time.Now().Format("2006/01/02 15:04:05")
+	fmt.Println(now, " ", message)
 }
