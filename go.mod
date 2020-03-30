@@ -5,6 +5,8 @@ go 1.14
 require (
 	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/c-bata/go-prompt v0.2.3
+	github.com/cheggaaa/pb/v3 v3.0.4
+	github.com/fatih/color v1.9.0
 	github.com/imroc/req v0.3.0
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/mattn/go-runewidth v0.0.8 // indirect

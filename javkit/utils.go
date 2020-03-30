@@ -3,6 +3,7 @@ package javkit
 import (
 	"errors"
 	"fmt"
+	"github.com/cheggaaa/pb/v3"
 	"io"
 	"os"
 	"regexp"
@@ -76,23 +77,29 @@ func JavLibraryCatchError(title string) bool {
 func MoveFile(sourcePath, destPath string) error {
 	inputFile, err := os.Open(sourcePath)
 	if err != nil {
-		return fmt.Errorf("Couldn't open source file: %s", err)
+		return fmt.Errorf("无法打开源文件: %s", err)
 	}
+	defer inputFile.Close()
 	outputFile, err := os.Create(destPath)
 	if err != nil {
 		inputFile.Close()
-		return fmt.Errorf("Couldn't open dest file: %s", err)
+		return fmt.Errorf("无法创建目标文件: %s", err)
 	}
 	defer outputFile.Close()
-	_, err = io.Copy(outputFile, inputFile)
+
+	fileInfo, _ := os.Stat(sourcePath)
+	processBar := pb.New(int(fileInfo.Size()))
+	processBar.Set(pb.SIBytesPrefix, true)
+	proxyReader := processBar.NewProxyReader(inputFile)
+	_, err = io.Copy(outputFile, proxyReader)
 	inputFile.Close()
 	if err != nil {
-		return fmt.Errorf("Writing to output file failed: %s", err)
+		return fmt.Errorf("写入目标文件失败: %s", err)
 	}
 	// The copy was successful, so now delete the original file
 	err = os.Remove(sourcePath)
 	if err != nil {
-		return fmt.Errorf("Failed removing original file: %s", err)
+		return fmt.Errorf("删除源文件失败: %s", err)
 	}
 	return nil
 }

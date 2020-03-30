@@ -65,12 +65,12 @@ func main() {
 			pathLoop = false
 			continue
 		}
-		mainLogin(t, arzonRequest, config)
+		mainLogic(t, arzonRequest, config)
 
 	}
 }
 
-func mainLogin(path string, arzonRequest *req.Req, config javkit.IniConfig) {
+func mainLogic(path string, arzonRequest *req.Req, config javkit.IniConfig) {
 
 	javList := javkit.GetJavFromFolder(path, config)
 
@@ -103,6 +103,17 @@ func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl strin
 		log(jav.Path, " 获取信息失败，原因：", err.Error())
 		log("可能与 Python 有关，请使用 Python3.7，并确保安装了所需依赖")
 		return
+	}
+
+	var picDownloadWg sync.WaitGroup
+	picDownloadWg.Add(1)
+	var picData []byte
+	var picError error
+
+	if config.IfJpg == "是" {
+		go javkit.DownloadPicAsync(10, javInfo.CoverUrl, &config, &picData, &picError, picDownloadWg.Done)
+	} else {
+		picDownloadWg.Done()
 	}
 
 	// 创建归类文件夹
@@ -139,16 +150,20 @@ func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl strin
 			}
 		}
 		fanartPath := filepath.Join(newFolderPath, fanartName)
-		err = javkit.DownloadPic(10, javInfo.CoverUrl, fanartPath, &config)
+
+		picDownloadWg.Wait()
+
+		if picError != nil && picError.Error() != "" {
+			log("下载图片失败，原因：", picError.Error())
+		}
+		err = javkit.SavePic(fanartPath, picData)
 		if err != nil {
-			log(fanartPath, " 下载图片失败，原因：", err.Error())
-			return
+			log(fanartPath, " 保存图片失败，原因：", err.Error())
 		}
 
 		err = javkit.MakePoster(fanartPath)
 		if err != nil {
 			log(fanartPath, " 生成海报失败，原因：", err.Error())
-			return
 		}
 	}
 
@@ -165,4 +180,6 @@ func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl strin
 		log(oldPath, " 删除旧文件夹失败，原因：", err.Error())
 		return
 	}
+
+	log(" 完成归类")
 }
