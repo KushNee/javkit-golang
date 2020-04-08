@@ -192,7 +192,13 @@ func mainLogic(path string, config javkit.IniConfig) {
 		return
 	}
 
-	searchBaseUrl := "https://javbus.com/search/"
+	var busUrl string
+	if strings.HasPrefix(config.BusUrl, "/") {
+		busUrl = config.BusUrl
+	} else {
+		busUrl = config.BusUrl + "/"
+	}
+	searchBaseUrl := busUrl + "search/"
 	var wg sync.WaitGroup
 	wg.Add(len(javList))
 	for _, jav := range javList {
