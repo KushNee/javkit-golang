@@ -21,7 +21,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -66,9 +65,6 @@ func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
 		}
 	}
 
-	scoreNum, _ := strconv.Atoi(javinfo.Score)
-	criticrating := string(scoreNum * 10)
-
 	var buffer bytes.Buffer
 	buffer.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>\n")
 	buffer.WriteString("<movie>\n")
@@ -80,14 +76,12 @@ func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
 			buffer.WriteString("  <actor>\n    <name>" + actress + "</name>\n    <type>Actor</type>\n  </actor>\n")
 		}
 	}
-	buffer.WriteString("  <rating>" + javinfo.Score + "</rating>\n")
-	buffer.WriteString("  <criticrating>" + criticrating + "</criticrating>\n")
 	buffer.WriteString("  <year>" + javinfo.Release.Year + "</year>\n")
 	buffer.WriteString("  <mpaa>NC-17</mpaa>\n")
 	buffer.WriteString("  <customrating>NC-17</customrating>\n")
 	buffer.WriteString("  <countrycode>JP</countrycode>\n")
 	buffer.WriteString("  <premiered>" + javinfo.Release.FullDate + "</premiered>\n")
-	buffer.WriteString("  <release>" + javinfo.Release.FullDate + "</release>\n")
+	buffer.WriteString("  <releasedate>" + javinfo.Release.FullDate + "</releasedate>\n")
 	buffer.WriteString("  <runtime>" + strconv.Itoa(javinfo.Length) + "</runtime>\n")
 	buffer.WriteString("  <country>日本</country>\n")
 	buffer.WriteString("  <studio>" + javinfo.Studio + "</studio>\n")
@@ -149,6 +143,11 @@ func CreateNewFolder(file JavFile, info JavInfo, config IniConfig) string {
 	}
 
 	newFolderPath := filepath.Join(basePath, info.LicensePrefix, newFolder)
+
+	newBasePath := filepath.Dir(newFolderPath)
+	if !Exists(newBasePath) {
+		os.Mkdir(newBasePath, 0776)
+	}
 
 	os.Mkdir(newFolderPath, 0776)
 
@@ -221,24 +220,13 @@ func getInfoFromArzon(url string, arzonRequest *req.Req, config IniConfig, info 
 }
 
 // GetJavInfo	获取影片信息
-func GetJavInfo(url string, config IniConfig, arzonRequest *req.Req, log func(messages ...string)) (JavInfo, error) {
+func GetJavInfo(url string, config IniConfig, log func(messages ...string)) (JavInfo, error) {
 
 	javInfo := CreateDefaultJavInfo()
 
 	libraryError := new(error)
 
-	var wg sync.WaitGroup
-	if config.IfNfo == "是" && config.IfPlot == "是" {
-		wg.Add(2)
-		arzonSearchUrl := arzonSearchBaseUrl + javInfo.License
-		go getArzonInfo(arzonSearchUrl, arzonRequest, config, &javInfo, wg.Done)
-	} else {
-		wg.Add(1)
-	}
-
-	go getJavLibraryInfo(url, config, log, &javInfo, wg.Done, libraryError)
-
-	wg.Wait()
+	getJavBusInfo(url, config, &javInfo, libraryError)
 
 	if reflect.ValueOf(libraryError).String() != "" {
 		return javInfo, *libraryError
@@ -247,36 +235,36 @@ func GetJavInfo(url string, config IniConfig, arzonRequest *req.Req, log func(me
 	return javInfo, nil
 }
 
-func getJavBusInfo(url string, config IniConfig, log func(messages ...string), javInfo *JavInfo, done func(), busError *error) {
-	defer done()
+func getJavBusInfo(url string, config IniConfig, javInfo *JavInfo, busError *error) {
 
-	req := makeRequest(&config)
-	javBusHtml, err := req.Get(url)
+	request := makeRequest(&config)
+	javBusHtml, err := request.Get(url)
 	if err != nil {
 		busError = &err
 		return
 	}
-	javbus, err := javBusHtml.ToString()
+	javBusSearch, err := javBusHtml.ToString()
 	if err != nil {
 		busError = &err
 		return
 	}
-	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(javbus))
+	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(javBusSearch))
 
-	singleUrl, exist := doc.Find("div#waterfall_h div.item").First().Find("a").Attr("href")
+	var javBus string
+	singleUrl, exist := doc.Find("div#waterfall div#waterfall div.item a.movie-box").First().Attr("href")
 	if exist {
 		url = singleUrl
-		javBusHtml, err := req.Get(url)
+		javBusHtml, err := request.Get(url)
 		if err != nil {
 			busError = &err
 			return
 		}
-		javbus, err := javBusHtml.ToString()
+		javBus, err = javBusHtml.ToString()
 		if err != nil {
 			busError = &err
 			return
 		}
-		doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javbus))
+		doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javBus))
 	} else {
 		notFoundError := errors.New("此影片无法在 JavBus 中找到")
 		busError = &notFoundError
@@ -288,12 +276,14 @@ func getJavBusInfo(url string, config IniConfig, log func(messages ...string), j
 
 	infoPList := doc.Find("div.col-md-3.info p")
 
-	if sutdio := infoPList.Eq(3).Find("a").Text(); sutdio != "" {
-		javInfo.Studio = sutdio
+	if studio := infoPList.Eq(4).Find("a").Text(); studio != "" {
+		javInfo.Studio = studio
 	}
 
-	if releaseDate := infoPList.Eq(1).Children().Eq(1).Text(); releaseDate != "" {
-		releaseDate = strings.TrimSpace(releaseDate)
+	if releaseDate := infoPList.Eq(1).Last().Text(); releaseDate != "" {
+		timeCompiler := regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
+		release := timeCompiler.FindString(releaseDate)
+		releaseDate = strings.TrimSpace(release)
 		dateSlice := strings.Split(releaseDate, "-")
 		year := dateSlice[0]
 		month := dateSlice[1]
@@ -304,43 +294,44 @@ func getJavBusInfo(url string, config IniConfig, log func(messages ...string), j
 		javInfo.Release.FullDate = releaseDate
 	}
 
-	if videoLength := infoPList.Eq(2).Children().Eq(1).Text(); videoLength != "" {
-		length, err := strconv.Atoi(videoLength)
+	if videoLength := infoPList.Eq(2).Last().Text(); videoLength != "" {
+		regRule := regexp.MustCompile(`\d{2,3}`)
+		number := regRule.FindString(videoLength)
+		length, err := strconv.Atoi(number)
 		if err == nil {
 			javInfo.Length = length
 		}
 	}
 
-	actresses := []string{}
-	doc.Find("div#video_cast table tbody tr td.text span.cast span.star a").Each(func(i int, selection *goquery.Selection) {
-		actresses = append(actresses, selection.Text())
+	if director := infoPList.Eq(3).Find("a").Text(); director != "" {
+		javInfo.Director = director
+	}
+
+	var actresses []string
+	doc.Find("div#avatar-waterfall a.avatar-box").Each(func(i int, selection *goquery.Selection) {
+		name := selection.Find("span").Text()
+		actresses = append(actresses, name)
 	})
+
 	// 无演员时不添加
 	if len(actresses) > 0 {
 		javInfo.FirstActress = actresses[0]
 		javInfo.AllActress = actresses
 	}
 
-	genres := []string{}
-	doc.Find("div#video_genres table tr td.text span.genre a").Each(func(i int, selection *goquery.Selection) {
-		genres = append(genres, selection.Text())
+	var genres []string
+	infoPList.NextFiltered("p.header").Next().Find("span.genre").Each(func(i int, selection *goquery.Selection) {
+		genres = append(genres, selection.Find("a").First().Text())
 	})
 	javInfo.Genres = genres
-	// TODO: 中文字幕检测
 
-	if coverUrl, exist := doc.Find("div#video_jacket img").Attr("src"); exist {
-		javInfo.CoverUrl = "https:" + coverUrl
-	}
-
-	if score := doc.Find("div#video_review table tr td.text span.score").Text(); score != "" {
-		score = score[1 : len(score)-1]
-		javInfo.Score = score
+	if coverUrl, exist := doc.Find("div.col-md-9.screencap a").Attr("href"); exist {
+		javInfo.CoverUrl = coverUrl
 	}
 
 }
 
-func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string), javInfo *JavInfo, done func(), libraryError *error) {
-	defer done()
+func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string), javInfo *JavInfo, libraryError *error) {
 	javlibraryhtml, err := getJavLibraryHtml(url, config, log)
 	if err != nil {
 		libraryError = &err
@@ -372,33 +363,33 @@ func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string
 		}
 	}
 
-	if JavLibraryCatchError(title) {
-		log(url, " 查询 JavLibrary 失败，等待 5 秒后继续")
-		time.Sleep(time.Second * 5)
-		javlibraryhtml, err = getJavLibraryHtml(url, config, log)
-		if err != nil {
-			libraryError = &err
-			return
-		}
-		javLibrary = string(javlibraryhtml)
-		doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javLibrary))
+	//if JavLibraryCatchError(title) {
+	//	log(url, " 查询 JavLibrary 失败，等待 5 秒后继续")
+	//	time.Sleep(time.Second * 5)
+	//	javlibraryhtml, err = getJavLibraryHtml(url, config, log)
+	//	if err != nil {
+	//		libraryError = &err
+	//		return
+	//	}
+	//	javLibrary = string(javlibraryhtml)
+	//	doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javLibrary))
+	//
+	//	title = doc.Find("title").Text()
+	//}
 
-		title = doc.Find("title").Text()
-	}
-
-	if JavLibraryCatchError(title) {
-		searchError := errors.New(url + " 获取失败，请稍后手动重试")
-		libraryError = &searchError
-		return
-	}
+	//if JavLibraryCatchError(title) {
+	//	searchError := errors.New(url + " 获取失败，请稍后手动重试")
+	//	libraryError = &searchError
+	//	return
+	//}
 
 	getTitleAndLicense(title, javInfo, config)
 
-	if sutdio := doc.Find("div#video_maker table tr td.text a").Text(); sutdio != "" {
+	if sutdio := doc.Find("div#video_maker table tbody tr td.text a").Text(); sutdio != "" {
 		javInfo.Studio = sutdio
 	}
 
-	if releaseDate := doc.Find("div#video_date table tr td.text").Text(); releaseDate != "" {
+	if releaseDate := doc.Find("div#video_date table tbody tr td.text").Text(); releaseDate != "" {
 		dateSlice := strings.Split(releaseDate, "-")
 		year := dateSlice[0]
 		month := dateSlice[1]
@@ -409,14 +400,14 @@ func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string
 		javInfo.Release.FullDate = releaseDate
 	}
 
-	if videoLength := doc.Find("div#video_length table tr td.text").Text(); videoLength != "" {
+	if videoLength := doc.Find("div#video_length table tbody tr td span.text").Text(); videoLength != "" {
 		length, err := strconv.Atoi(videoLength)
 		if err == nil {
 			javInfo.Length = length
 		}
 	}
 
-	if director := doc.Find("div#video_director table tr td.text").Text(); director != "" && director[0] != '-' {
+	if director := doc.Find("div#video_director table tbody tr td.text").Text(); director != "" && director[0] != '-' {
 		javInfo.Director = director
 	}
 
@@ -431,7 +422,7 @@ func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string
 	}
 
 	genres := []string{}
-	doc.Find("div#video_genres table tr td.text span.genre a").Each(func(i int, selection *goquery.Selection) {
+	doc.Find("div#video_genres table tbody tr td.text span.genre a").Each(func(i int, selection *goquery.Selection) {
 		genres = append(genres, selection.Text())
 	})
 	javInfo.Genres = genres
@@ -501,7 +492,7 @@ func cycleSearchIntroduction(url string, request *req.Req, config IniConfig) (st
 	if detailHtml != "" && err == nil {
 
 		detail, _ := goquery.NewDocumentFromReader(strings.NewReader(detailHtml))
-		introduction := detail.Find("div#detail_new table tr td tr td.text div.item_text").Text()
+		introduction := detail.Find("div#detail_new table tbody tr td table.item_detail tbody tr:eq(1) td.text div.item_text").Text()
 
 		return introduction, nil
 
@@ -556,8 +547,7 @@ func getTitleAndLicense(originalTitle string, info *JavInfo, config IniConfig) {
 func getJavLibraryHtml(url string, config IniConfig, log func(messages ...string)) ([]byte, error) {
 	var interpreter string
 	args := []string{config.Script, "--url=" + url}
-	if config.Interpreter == "" {
-		log("未提供 Python 解释器，将尝试调用默认 Python")
+	if "" == config.Interpreter {
 		interpreter = "python"
 	} else {
 		interpreter = config.Interpreter
@@ -571,7 +561,7 @@ func makeRequest(config *IniConfig) *req.Req {
 	request := req.New()
 	request.SetTimeout(time.Second * 10)
 	if config.IfProxy == "是" && config.Proxy != "" {
-		request.SetProxyUrl(config.Proxy)
+		_ = request.SetProxyUrl(config.Proxy)
 	}
 	return request
 }
@@ -773,16 +763,16 @@ func DownloadPicAsync(errorTimes int, picUrl string, config *IniConfig, pPicData
 		continue
 	}
 	if downloadErr != nil {
-		*pDownloadErr=downloadErr
-		pPicData=nil
+		*pDownloadErr = downloadErr
+		pPicData = nil
 	}
 	data, err := response.ToBytes()
 	if err != nil {
-		*pDownloadErr=err
-		*pPicData=nil
+		*pDownloadErr = err
+		*pPicData = nil
 	}
-	*pDownloadErr=nil
-	*pPicData=data
+	*pDownloadErr = nil
+	*pPicData = data
 }
 
 func DownloadPic(errorTimes int, picUrl string, config *IniConfig) ([]byte, error) {

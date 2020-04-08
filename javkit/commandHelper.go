@@ -9,13 +9,24 @@ import (
 	"strings"
 )
 
+func CommandCompleter(d prompt.Document) []prompt.Suggest {
+	input := d.TextBeforeCursor()
+	commandList := []prompt.Suggest{
+		{Text: "manage", Description: "整理"},
+		{Text: "delete", Description: "删除"},
+		{Text: "exit", Description: "退出"},
+	}
+
+	return prompt.FilterContains(commandList, input, true)
+}
+
 func PathCompleter(d prompt.Document) []prompt.Suggest {
 	var suggestionList []prompt.Suggest
 	var path string
 
 	input := d.TextBeforeCursor()
 	commandList := []prompt.Suggest{
-		{Text: "exit", Description: "退出"},
+		{Text: "back", Description: "返回"},
 	}
 
 	path = fixDir(input)

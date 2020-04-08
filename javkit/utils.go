@@ -13,13 +13,21 @@ import (
 
 // GetVideoTitle	正则匹配找出番号
 func GetVideoTitle(name string) (string, error) {
-	titleRegexp := regexp.MustCompile(`([a-zA-Z]{2,6})-? ?(\d{2,5})`)
-	titles := titleRegexp.FindStringSubmatch(name)
-	if len(titles) == 0 {
-		return "", errors.New(" 不是影片")
+	var licensePrefix, license string
+	T28Regexp := regexp.MustCompile(`([tT]28)-?_?(\d{2,5})`)
+	T28Title := T28Regexp.FindStringSubmatch(name)
+	if len(T28Title) > 0 {
+		licensePrefix = strings.ToUpper(T28Title[1])
+		license = licensePrefix + "-" + T28Title[2]
+	} else {
+		titleRegexp := regexp.MustCompile(`([a-zA-Z]{2,6})-? ?(\d{2,5})`)
+		titles := titleRegexp.FindStringSubmatch(name)
+		if len(titles) == 0 {
+			return "", errors.New(" 不是影片")
+		}
+		licensePrefix = strings.ToUpper(titles[1])
+		license = licensePrefix + "-" + titles[2]
 	}
-	licensePrefix := strings.ToUpper(titles[1])
-	license := licensePrefix + "-" + titles[2]
 	return license, nil
 }
 
