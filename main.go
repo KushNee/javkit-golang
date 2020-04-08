@@ -193,7 +193,7 @@ func mainLogic(path string, config javkit.IniConfig) {
 	}
 
 	var busUrl string
-	if strings.HasPrefix(config.BusUrl, "/") {
+	if strings.HasSuffix(config.BusUrl, "/") {
 		busUrl = config.BusUrl
 	} else {
 		busUrl = config.BusUrl + "/"
