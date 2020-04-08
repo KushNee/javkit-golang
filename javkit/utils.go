@@ -97,9 +97,8 @@ func MoveFile(sourcePath, destPath string) error {
 
 	fileInfo, _ := os.Stat(sourcePath)
 	size := int(fileInfo.Size())
-	processBar := pb.Full.Start(size)
-	processBar.SetWriter(os.Stdout)
-	processBar.Set(pb.SIBytesPrefix, true)
+	processBarBuilder := pb.New(size)
+	processBar := processBarBuilder.SetWriter(os.Stdout).Set(pb.SIBytesPrefix, true).Start()
 	proxyReader := processBar.NewProxyReader(inputFile)
 	_, err = io.Copy(outputFile, proxyReader)
 	processBar.Finish()
