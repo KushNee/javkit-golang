@@ -68,7 +68,6 @@ func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
 	var buffer bytes.Buffer
 	buffer.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>\n")
 	buffer.WriteString("<movie>\n")
-	buffer.WriteString("  <plot>" + javinfo.Introduction + javinfo.Review + "</plot>\n")
 	buffer.WriteString("  <title>" + customTitle + "</title>\n")
 	buffer.WriteString("  <director>" + javinfo.Director + "</director>\n")
 	if len(javinfo.AllActress) > 0 {

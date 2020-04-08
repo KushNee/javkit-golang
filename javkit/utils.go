@@ -96,10 +96,13 @@ func MoveFile(sourcePath, destPath string) error {
 	defer outputFile.Close()
 
 	fileInfo, _ := os.Stat(sourcePath)
-	processBar := pb.New(int(fileInfo.Size()))
+	size := int(fileInfo.Size())
+	processBar := pb.Full.Start(size)
+	processBar.SetWriter(os.Stdout)
 	processBar.Set(pb.SIBytesPrefix, true)
 	proxyReader := processBar.NewProxyReader(inputFile)
 	_, err = io.Copy(outputFile, proxyReader)
+	processBar.Finish()
 	inputFile.Close()
 	if err != nil {
 		return fmt.Errorf("写入目标文件失败: %s", err)
