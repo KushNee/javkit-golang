@@ -173,29 +173,6 @@ func renameVideo(info JavInfo, config IniConfig) string {
 	return name
 }
 
-// TODO: 使用 arzon 获取所有信息
-//func GetJavInfoByArzon(url string, config IniConfig, arzonRequest *req.Req) (JavInfo, error) {
-//	javInfo := CreateDefaultJavInfo()
-//
-//	searchHtml, err := GetArzonHtml(url, arzonRequest, &config)
-//	if err != nil {
-//		arzonRequest, err = GetArzonCookie(&config)
-//		if err != nil {
-//			return javInfo, err
-//		}
-//		searchHtml, err = GetArzonHtml(url, arzonRequest, &config)
-//	}
-//	if searchHtml != "" && err == nil {
-//		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(searchHtml))
-//
-//		detail,_:=doc.Find("div#item div.pictlist dl.hentry dd.entry-title h2 a").First().Attr("href")
-//		detailUrl:=arzonBaseUrl+detail
-//
-//
-//	}
-//	return javInfo, err
-//}
-
 func getInfoFromArzon(url string, arzonRequest *req.Req, config IniConfig, info *JavInfo) error {
 	detailHtml, err := GetArzonHtml(url, arzonRequest, &config)
 	if err != nil {
@@ -425,7 +402,6 @@ func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string
 		genres = append(genres, selection.Text())
 	})
 	javInfo.Genres = genres
-	// TODO: 中文字幕检测
 
 	if coverUrl, exist := doc.Find("div#video_jacket img").Attr("src"); exist {
 		javInfo.CoverUrl = "https:" + coverUrl
