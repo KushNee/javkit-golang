@@ -897,6 +897,9 @@ func GetJavFromFolder(path string, config IniConfig) []JavFile {
 						PrintWithTime(filename, err.Error(), " 跳过")
 						continue
 					}
+					if strings.Contains(license, "-") {
+						license = strings.Replace(license, "-", "", -1)
+					}
 					if !funk.Contains(javDic, license) {
 						javDic[license] = 1
 					} else {
