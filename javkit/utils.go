@@ -3,12 +3,13 @@ package javkit
 import (
 	"errors"
 	"fmt"
-	"github.com/cheggaaa/pb/v3"
 	"io"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/cheggaaa/pb/v3"
 )
 
 // GetVideoTitle	正则匹配找出番号
@@ -63,7 +64,7 @@ func CreateDefaultJavInfo() JavInfo {
 
 // Exists 判断路径是否存在
 func Exists(path string) bool {
-	_, err := os.Stat(path) //os.Stat获取文件信息
+	_, err := os.Stat(path) // os.Stat获取文件信息
 	if err != nil {
 		if os.IsExist(err) {
 			return true

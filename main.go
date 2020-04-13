@@ -3,14 +3,16 @@ package main
 import (
 	"encoding/xml"
 	"fmt"
-	"github.com/KushNee/javkit-golang/javkit"
-	"github.com/c-bata/go-prompt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/c-bata/go-prompt"
+
+	"github.com/KushNee/javkit-golang/javkit"
 )
 
 func main() {
@@ -149,15 +151,15 @@ func Delete(config javkit.IniConfig) {
 }
 
 func Manage(config javkit.IniConfig) {
-	//javkit.PrintWithTime("正在进行 arzon 成人认证。。。")
+	// javkit.PrintWithTime("正在进行 arzon 成人认证。。。")
 	//
-	//// 获取 arzon cookie
-	//arzonRequest, err := javkit.GetArzonCookie(&config)
-	//if err != nil {
+	// // 获取 arzon cookie
+	// arzonRequest, err := javkit.GetArzonCookie(&config)
+	// if err != nil {
 	//	log.Fatalln("无法完成 arzon 成人验证，请检查网络连接。原因：", err)
-	//}
+	// }
 	//
-	//javkit.PrintWithTime("完成 arzon 成人认证。。。")
+	// javkit.PrintWithTime("完成 arzon 成人认证。。。")
 
 	fmt.Println("输入后回车选择路径")
 	for {

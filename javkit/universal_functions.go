@@ -4,12 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"github.com/fatih/color"
-	"github.com/imroc/req"
-	"github.com/pelletier/go-toml"
-	"github.com/thoas/go-funk"
-	"gopkg.in/ini.v1"
 	"image"
 	"image/jpeg"
 	"image/png"
@@ -22,6 +16,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/fatih/color"
+	"github.com/imroc/req"
+	"github.com/pelletier/go-toml"
+	"github.com/thoas/go-funk"
+	"gopkg.in/ini.v1"
 )
 
 const (
@@ -339,7 +340,7 @@ func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string
 		}
 	}
 
-	//if JavLibraryCatchError(title) {
+	// if JavLibraryCatchError(title) {
 	//	log(url, " 查询 JavLibrary 失败，等待 5 秒后继续")
 	//	time.Sleep(time.Second * 5)
 	//	javlibraryhtml, err = getJavLibraryHtml(url, config, log)
@@ -351,13 +352,13 @@ func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string
 	//	doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javLibrary))
 	//
 	//	title = doc.Find("title").Text()
-	//}
+	// }
 
-	//if JavLibraryCatchError(title) {
+	// if JavLibraryCatchError(title) {
 	//	searchError := errors.New(url + " 获取失败，请稍后手动重试")
 	//	libraryError = &searchError
 	//	return
-	//}
+	// }
 
 	getTitleAndLicense(title, javInfo, config)
 

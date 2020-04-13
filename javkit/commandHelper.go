@@ -1,12 +1,13 @@
 package javkit
 
 import (
-	"github.com/c-bata/go-prompt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/c-bata/go-prompt"
 )
 
 func CommandCompleter(d prompt.Document) []prompt.Suggest {
