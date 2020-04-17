@@ -74,15 +74,6 @@ func Exists(path string) bool {
 	return true
 }
 
-// JavLibraryCatchError	判断 javlibrary 页面是否抓取成功。目前使用 python 脚本完成 cloudflare challenge，以后可能去除
-func JavLibraryCatchError(title string) bool {
-	if strings.Contains(title, "404") || strings.Contains(title, "502") || strings.Contains(title, "503") {
-		return true
-	} else {
-		return false
-	}
-}
-
 func MoveFile(sourcePath, destPath string) error {
 	inputFile, err := os.Open(sourcePath)
 	if err != nil {

@@ -9,7 +9,6 @@ import (
 	"image/png"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -26,10 +25,7 @@ import (
 )
 
 const (
-	arzonBaseUrl       = "https://www.arzon.jp"
-	arzonUrl           = "https://www.arzon.jp/index.php"
-	arzonSearchBaseUrl = "https://www.arzon.jp/itemlist.html?t=&m=all&s=&q="
-	cutPercent         = 0.52625
+	cutPercent = 0.52625
 )
 
 var yellow = color.New(color.FgYellow)
@@ -47,8 +43,8 @@ func CreateSymlink(path, newFolderPath string, info JavInfo) {
 }
 
 // CreateNfo	创建相应影片的 nfo 信息
-func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
-	newName := renameVideo(javinfo, config)
+func CreateNfo(path string, javInfo JavInfo, config IniConfig) {
+	newName := renameVideo(javInfo, config)
 	nfoFile, _ := os.Create(filepath.Join(path, newName) + ".nfo")
 	defer nfoFile.Close()
 
@@ -56,13 +52,13 @@ func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
 	titleRules := strings.Split(config.CustomTitle, "+")
 	for _, rule := range titleRules {
 		if rule == "车牌" {
-			customTitle += javinfo.License
+			customTitle += javInfo.License
 		} else if rule == "空格" {
 			customTitle += " "
 		} else if rule == "标题" {
-			customTitle += javinfo.Title
+			customTitle += javInfo.Title
 		} else if rule == "完整标题" {
-			customTitle += javinfo.FullTitle
+			customTitle += javInfo.FullTitle
 		}
 	}
 
@@ -70,27 +66,27 @@ func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
 	buffer.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\" ?>\n")
 	buffer.WriteString("<movie>\n")
 	buffer.WriteString("  <title>" + customTitle + "</title>\n")
-	buffer.WriteString("  <director>" + javinfo.Director + "</director>\n")
-	if len(javinfo.AllActress) > 0 {
-		for _, actress := range javinfo.AllActress {
+	buffer.WriteString("  <director>" + javInfo.Director + "</director>\n")
+	if len(javInfo.AllActress) > 0 {
+		for _, actress := range javInfo.AllActress {
 			buffer.WriteString("  <actor>\n    <name>" + actress + "</name>\n    <type>Actor</type>\n  </actor>\n")
 		}
 	}
-	buffer.WriteString("  <year>" + javinfo.Release.Year + "</year>\n")
+	buffer.WriteString("  <year>" + javInfo.Release.Year + "</year>\n")
 	buffer.WriteString("  <mpaa>NC-17</mpaa>\n")
 	buffer.WriteString("  <customrating>NC-17</customrating>\n")
 	buffer.WriteString("  <countrycode>JP</countrycode>\n")
-	buffer.WriteString("  <premiered>" + javinfo.Release.FullDate + "</premiered>\n")
-	buffer.WriteString("  <releasedate>" + javinfo.Release.FullDate + "</releasedate>\n")
-	buffer.WriteString("  <runtime>" + strconv.Itoa(javinfo.Length) + "</runtime>\n")
+	buffer.WriteString("  <premiered>" + javInfo.Release.FullDate + "</premiered>\n")
+	buffer.WriteString("  <releasedate>" + javInfo.Release.FullDate + "</releasedate>\n")
+	buffer.WriteString("  <runtime>" + strconv.Itoa(javInfo.Length) + "</runtime>\n")
 	buffer.WriteString("  <country>日本</country>\n")
-	buffer.WriteString("  <studio>" + javinfo.Studio + "</studio>\n")
-	buffer.WriteString("  <id>" + javinfo.License + "</id>\n")
-	buffer.WriteString("  <num>" + javinfo.License + "</num>\n")
-	for _, genre := range javinfo.Genres {
+	buffer.WriteString("  <studio>" + javInfo.Studio + "</studio>\n")
+	buffer.WriteString("  <id>" + javInfo.License + "</id>\n")
+	buffer.WriteString("  <num>" + javInfo.License + "</num>\n")
+	for _, genre := range javInfo.Genres {
 		buffer.WriteString("  <genre>" + genre + "</genre>\n")
 	}
-	for _, genre := range javinfo.Genres {
+	for _, genre := range javInfo.Genres {
 		buffer.WriteString("  <tag>" + genre + "</tag>\n")
 	}
 	buffer.WriteString("</movie>\n")
@@ -100,7 +96,7 @@ func CreateNfo(path string, javinfo JavInfo, config IniConfig) {
 }
 
 // RenameAndMoveVideo 重命名并移动影片到新的文件夹
-func RenameAndMoveVideo(file JavFile, info JavInfo, config IniConfig, path string, log func(messages ...string)) (string, error) {
+func RenameAndMoveVideo(file JavFile, info JavInfo, config IniConfig, path string) (string, error) {
 	prefix := filepath.Ext(file.Path)
 	newName := renameVideo(info, config) + prefix
 	newPath := filepath.Join(path, newName)
@@ -174,30 +170,8 @@ func renameVideo(info JavInfo, config IniConfig) string {
 	return name
 }
 
-func getInfoFromArzon(url string, arzonRequest *req.Req, config IniConfig, info *JavInfo) error {
-	detailHtml, err := GetArzonHtml(url, arzonRequest, &config)
-	if err != nil {
-		arzonRequest, err = GetArzonCookie(&config)
-		if err != nil {
-			return err
-		}
-		detailHtml, err = GetArzonHtml(url, arzonRequest, &config)
-	}
-	if detailHtml != "" && err == nil { // 获取相关信息
-		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(detailHtml))
-
-		title := []rune(doc.Find("title").Text())
-		prefix := []rune("Arzon： ")
-		title = title[len(prefix):]
-		changedTitle := string(title)
-		info.Title = changedTitle
-
-	}
-	return err
-}
-
 // GetJavInfo	获取影片信息
-func GetJavInfo(url string, config IniConfig, log func(messages ...string)) (JavInfo, error) {
+func GetJavInfo(url string, config IniConfig) (JavInfo, error) {
 
 	javInfo := CreateDefaultJavInfo()
 
@@ -308,174 +282,6 @@ func getJavBusInfo(url string, config IniConfig, javInfo *JavInfo, busError *err
 
 }
 
-func getJavLibraryInfo(url string, config IniConfig, log func(messages ...string), javInfo *JavInfo, libraryError *error) {
-	javlibraryhtml, err := getJavLibraryHtml(url, config, log)
-	if err != nil {
-		libraryError = &err
-		return
-	}
-	javLibrary := string(javlibraryhtml)
-	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(javLibrary))
-
-	title := doc.Find("title").Text()
-
-	if strings.Contains(title, "识别码搜寻结果") {
-		log("未进入详情页，尝试寻找第一个结果继续查找")
-		singleUrl, exist := doc.Find("div#rightcolumn div.videothumblist div.videos div.video").First().Find("a").Attr("href")
-		if exist {
-			url = config.LibraryUrl + "cn/" + singleUrl[2:]
-			javlibraryhtml, err = getJavLibraryHtml(url, config, log)
-			if err != nil {
-				libraryError = &err
-				return
-			}
-			javLibrary = string(javlibraryhtml)
-			doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javLibrary))
-			title = doc.Find("title").Text()
-		} else {
-			notFoundError := errors.New("此影片无法在 JavLibrary 中找到")
-			libraryError = &notFoundError
-			return
-
-		}
-	}
-
-	// if JavLibraryCatchError(title) {
-	//	log(url, " 查询 JavLibrary 失败，等待 5 秒后继续")
-	//	time.Sleep(time.Second * 5)
-	//	javlibraryhtml, err = getJavLibraryHtml(url, config, log)
-	//	if err != nil {
-	//		libraryError = &err
-	//		return
-	//	}
-	//	javLibrary = string(javlibraryhtml)
-	//	doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javLibrary))
-	//
-	//	title = doc.Find("title").Text()
-	// }
-
-	// if JavLibraryCatchError(title) {
-	//	searchError := errors.New(url + " 获取失败，请稍后手动重试")
-	//	libraryError = &searchError
-	//	return
-	// }
-
-	getTitleAndLicense(title, javInfo, config)
-
-	if sutdio := doc.Find("div#video_maker table tbody tr td.text a").Text(); sutdio != "" {
-		javInfo.Studio = sutdio
-	}
-
-	if releaseDate := doc.Find("div#video_date table tbody tr td.text").Text(); releaseDate != "" {
-		dateSlice := strings.Split(releaseDate, "-")
-		year := dateSlice[0]
-		month := dateSlice[1]
-		day := dateSlice[2]
-		javInfo.Release.Year = year
-		javInfo.Release.Month = month
-		javInfo.Release.Day = day
-		javInfo.Release.FullDate = releaseDate
-	}
-
-	if videoLength := doc.Find("div#video_length table tbody tr td span.text").Text(); videoLength != "" {
-		length, err := strconv.Atoi(videoLength)
-		if err == nil {
-			javInfo.Length = length
-		}
-	}
-
-	if director := doc.Find("div#video_director table tbody tr td.text").Text(); director != "" && director[0] != '-' {
-		javInfo.Director = director
-	}
-
-	actresses := []string{}
-	doc.Find("div#video_cast table tbody tr td.text span.cast span.star a").Each(func(i int, selection *goquery.Selection) {
-		actresses = append(actresses, selection.Text())
-	})
-	// 无演员时不添加
-	if len(actresses) > 0 {
-		javInfo.FirstActress = actresses[0]
-		javInfo.AllActress = actresses
-	}
-
-	genres := []string{}
-	doc.Find("div#video_genres table tbody tr td.text span.genre a").Each(func(i int, selection *goquery.Selection) {
-		genres = append(genres, selection.Text())
-	})
-	javInfo.Genres = genres
-
-	if coverUrl, exist := doc.Find("div#video_jacket img").Attr("src"); exist {
-		javInfo.CoverUrl = "https:" + coverUrl
-	}
-
-	if score := doc.Find("div#video_review table tr td.text span.score").Text(); score != "" {
-		score = score[1 : len(score)-1]
-		javInfo.Score = score
-	}
-
-	reviews := []string{}
-	doc.Find("div#video_reviews table.review td.t textarea.hidden").Each(func(i int, selection *goquery.Selection) {
-		reviews = append(reviews, selection.Text())
-	})
-	plotReview := "\n[精彩影评]：" + strings.Join(reviews, "\n")
-	javInfo.Review = plotReview
-}
-
-func getArzonInfo(arzonSearchUrl string, arzonRequest *req.Req, config IniConfig, javInfo *JavInfo, done func()) {
-	defer done()
-	introduction, err := getArzonIntroduction(arzonSearchUrl, arzonRequest, config, javInfo)
-	if err == nil {
-		javInfo.Introduction = introduction
-	}
-}
-
-// getArzonIntroduction	获取 arzon 的作品介绍
-func getArzonIntroduction(url string, request *req.Req, config IniConfig, info *JavInfo) (string, error) {
-	searchHtml, err := GetArzonHtml(url, request, &config)
-	if err != nil {
-		request, err = GetArzonCookie(&config)
-		if err != nil {
-			return "", err
-		}
-		searchHtml, err = GetArzonHtml(url, request, &config)
-	}
-	if searchHtml != "" && err == nil {
-		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(searchHtml))
-
-		var introduction string
-		doc.Find("div#item div.pictlist dl.hentry dd.entry-title h2 a").Each(func(i int, selection *goquery.Selection) {
-			urlSuffix, _ := selection.Attr("href")
-			detailUrl := arzonBaseUrl + urlSuffix
-			introduction, err = cycleSearchIntroduction(detailUrl, request, config)
-		})
-
-		return introduction, err
-
-	}
-	return "", err
-}
-
-// cycleSearchIntroduction	循环查询每个详情页的介绍
-func cycleSearchIntroduction(url string, request *req.Req, config IniConfig) (string, error) {
-	detailHtml, err := GetArzonHtml(url, request, &config)
-	if err != nil {
-		request, err = GetArzonCookie(&config)
-		if err != nil {
-			return "", err
-		}
-		detailHtml, err = GetArzonHtml(url, request, &config)
-	}
-	if detailHtml != "" && err == nil {
-
-		detail, _ := goquery.NewDocumentFromReader(strings.NewReader(detailHtml))
-		introduction := detail.Find("div#detail_new table tbody tr td table.item_detail tbody tr:eq(1) td.text div.item_text").Text()
-
-		return introduction, nil
-
-	}
-	return "", err
-}
-
 // getTitleAndLicense	对标题和车牌进行获取和清理
 func getTitleAndLicense(originalTitle string, info *JavInfo, config IniConfig) {
 	originalTitle = strings.ReplaceAll(originalTitle, " - JavBus", "")
@@ -516,20 +322,6 @@ func getTitleAndLicense(originalTitle string, info *JavInfo, config IniConfig) {
 	prefix := strings.Split(license, "-")[0]
 	info.LicensePrefix = prefix
 
-}
-
-// TODO: cloudflare 的防护突破
-// getJavLibraryHtml	获取 javlibrary 页面信息
-func getJavLibraryHtml(url string, config IniConfig, log func(messages ...string)) ([]byte, error) {
-	var interpreter string
-	args := []string{config.Script, "--url=" + url}
-	if "" == config.Interpreter {
-		interpreter = "python"
-	} else {
-		interpreter = config.Interpreter
-	}
-	out, err := exec.Command(interpreter, args...).Output()
-	return out, err
 }
 
 // makeRequest 生成一个 10 秒超时、装配代理的空 request
@@ -657,48 +449,6 @@ func GetIniConfig(configType string, path string) (IniConfig, error) {
 	return config, nil
 }
 
-// GetArzonCookie	通过 arzon 的成人认证，并返回相应的 request
-func GetArzonCookie(config *IniConfig) (*req.Req, error) {
-	request := req.New()
-	request.SetTimeout(time.Second * 10)
-	if config.IfProxy == "是" && config.Proxy != "" {
-		err := request.SetProxyUrl(config.Proxy)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	params := req.Param{
-		"action":   "adult_customer_agecheck",
-		"agecheck": 1,
-		"redirect": "https://www.arzon.jp",
-	}
-	_, err := request.Post(arzonUrl, params)
-	if err != nil {
-		return nil, err
-	}
-
-	return request, nil
-
-}
-
-// GetArzonHtml	获取 arzon 页面信息
-func GetArzonHtml(url string, arzonRequest *req.Req, config *IniConfig) (string, error) {
-
-	response, err := arzonRequest.Get(url)
-	if err != nil {
-		return "", err
-	}
-
-	result, err := response.ToString()
-	if err != nil {
-		return "", err
-	}
-
-	return result, nil
-
-}
-
 // SavePic	下载封面
 func SavePic(picPath string, picData []byte) error {
 
@@ -749,31 +499,6 @@ func DownloadPicAsync(errorTimes int, picUrl string, config *IniConfig, pPicData
 	}
 	*pDownloadErr = nil
 	*pPicData = data
-}
-
-func DownloadPic(errorTimes int, picUrl string, config *IniConfig) ([]byte, error) {
-	request := makeRequest(config)
-	var response *req.Resp
-	var downloadErr error
-	tryTimes := 0
-	for ; tryTimes < errorTimes; tryTimes++ {
-		resp, err := request.Get(picUrl)
-		downloadErr = err
-		if err == nil {
-			response = resp
-			break
-		}
-		time.Sleep(time.Second * 1)
-		continue
-	}
-	if downloadErr != nil {
-		return nil, downloadErr
-	}
-	data, err := response.ToBytes()
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
 }
 
 // MakePoster	用来生成 poster，并且完成封面的重命名

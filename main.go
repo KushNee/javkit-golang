@@ -151,15 +151,6 @@ func Delete(config javkit.IniConfig) {
 }
 
 func Manage(config javkit.IniConfig) {
-	// javkit.PrintWithTime("正在进行 arzon 成人认证。。。")
-	//
-	// // 获取 arzon cookie
-	// arzonRequest, err := javkit.GetArzonCookie(&config)
-	// if err != nil {
-	//	log.Fatalln("无法完成 arzon 成人验证，请检查网络连接。原因：", err)
-	// }
-	//
-	// javkit.PrintWithTime("完成 arzon 成人认证。。。")
 
 	fmt.Println("输入后回车选择路径")
 	for {
@@ -230,7 +221,7 @@ func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl strin
 	defer done()
 	searchUrl := searchBaseUrl + jav.License
 	// 获取 jav 所有需要的信息
-	javInfo, err := javkit.GetJavInfo(searchUrl, config, log)
+	javInfo, err := javkit.GetJavInfo(searchUrl, config)
 	if err != nil {
 		log(jav.Path, " 获取信息失败，原因：", err.Error())
 		log("可能与 Python 有关，请使用 Python3.7，并确保安装了所需依赖")
@@ -257,7 +248,7 @@ func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl strin
 	newFolderPath := javkit.CreateNewFolder(jav, javInfo, config)
 
 	// 移动影片
-	newVideoPath, err := javkit.RenameAndMoveVideo(jav, javInfo, config, newFolderPath, log)
+	newVideoPath, err := javkit.RenameAndMoveVideo(jav, javInfo, config, newFolderPath)
 	if err != nil {
 		log(jav.Path, " 移动影片失败，原因：", err.Error())
 		err = os.RemoveAll(newFolderPath)
