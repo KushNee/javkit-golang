@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -194,15 +195,18 @@ func mainLogic(path string, config javkit.IniConfig) {
 	searchBaseUrl := busUrl + "search/"
 	var wg sync.WaitGroup
 	wg.Add(len(javList))
+	var infoMap = make(map[string]javkit.JavInfo, len(javList))
 	for _, jav := range javList {
 		title := []string{"[", filepath.Base(jav.Path), "]", " "}
 		standPrint := func(messages ...string) {
 			messages = append(title, messages...)
 			javkit.PrintWithTime(messages...)
 		}
-		go processJav(config, jav, searchBaseUrl, wg.Done, standPrint)
+		go collectAllInfo(config, jav, searchBaseUrl, wg.Done, standPrint, infoMap)
+
 	}
 	wg.Wait()
+	processJav(config, infoMap)
 
 	javEmptyList := javkit.GetJavFromFolder(path, config)
 	if len(javEmptyList) == 0 && deleteParent {
@@ -217,89 +221,109 @@ func mainLogic(path string, config javkit.IniConfig) {
 
 }
 
-func processJav(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl string, done func(), log func(messages ...string)) {
+func collectAllInfo(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl string, done func(), log func(messages ...string), infoMap map[string]javkit.JavInfo) {
 	defer done()
+
+	javInfo, err := getInfo(config, jav, searchBaseUrl)
+	if err != nil {
+		log(jav.Path, " 无法获取影片信息，跳过：", err.Error())
+	} else {
+		infoMap[jav.Path] = javInfo
+	}
+}
+
+func processJav(config javkit.IniConfig, infoMap map[string]javkit.JavInfo) {
+
+	for videoPath, javInfo := range infoMap {
+		title := []string{"[", filepath.Base(videoPath), "]", " "}
+		log := func(messages ...string) {
+			messages = append(title, messages...)
+			javkit.PrintWithTime(messages...)
+		}
+		var picDownloadWg sync.WaitGroup
+		picDownloadWg.Add(1)
+		var picData []byte
+		var picError error
+
+		if config.IfJpg == "是" {
+			go javkit.DownloadPicAsync(10, javInfo.CoverUrl, &config, &picData, &picError, picDownloadWg.Done)
+		} else {
+			picDownloadWg.Done()
+		}
+
+		// 创建归类文件夹
+		newFolderPath := javkit.CreateNewFolder(videoPath, javInfo, config)
+
+		// 移动影片
+		newVideoPath, err := javkit.RenameAndMoveVideo(videoPath, javInfo, config, newFolderPath)
+		if err != nil {
+			log(videoPath, " 移动影片失败，原因：", err.Error())
+			err = os.RemoveAll(newFolderPath)
+			if err != nil {
+				log("删除新建文件夹", newFolderPath, "失败，原因：", err.Error())
+			}
+			return
+		}
+		log(newVideoPath)
+
+		// 创建 nfo
+		if config.IfNfo == "是" {
+			javkit.CreateNfo(newFolderPath, javInfo, config)
+		}
+
+		// 下载图片
+		if config.IfJpg == "是" {
+			fanartRules := strings.Split(config.CustomFanart, "+")
+			var fanartName string
+			for _, rule := range fanartRules {
+				switch rule {
+				case "视频":
+					videoName := strings.Split(filepath.Base(newVideoPath), ".")[0]
+					fanartName += videoName
+				case "-fanart.jpg":
+					fanartName += rule
+				}
+			}
+			fanartPath := filepath.Join(newFolderPath, fanartName)
+
+			picDownloadWg.Wait()
+
+			if picError != nil && picError.Error() != "" {
+				log("下载图片失败，原因：", picError.Error())
+			}
+			err = javkit.SavePic(fanartPath, picData)
+			if err != nil {
+				log(fanartPath, " 保存图片失败，原因：", err.Error())
+			}
+
+			err = javkit.MakePoster(fanartPath)
+			if err != nil {
+				log(fanartPath, " 生成海报失败，原因：", err.Error())
+			}
+		}
+
+		// 创建软链接
+		if config.CreateSymboliclink == "是" && config.SymboliclinkDirectory != "" {
+			fullPath := filepath.Join(filepath.Dir(config.ClassifyRoot), config.SymboliclinkDirectory)
+			javkit.CreateSymlink(fullPath, newFolderPath, javInfo)
+		}
+
+		log(" 完成归类")
+		delete(infoMap, videoPath)
+	}
+
+}
+
+func getInfo(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl string) (javkit.JavInfo, error) {
 	searchUrl := searchBaseUrl + jav.License
 	// 获取 jav 所有需要的信息
 	javInfo, err := javkit.GetJavInfo(searchUrl, config)
 	if err != nil {
-		log(jav.Path, " 获取信息失败，原因：", err.Error())
-		log("可能与 Python 有关，请使用 Python3.7，并确保安装了所需依赖")
-		return
+		return javkit.JavInfo{}, err
 	}
 
 	if javInfo.License == "ABC-123" {
-		log("无法获得影片信息，跳过")
-		return
+		return javkit.JavInfo{}, errors.New("不存在影片信息")
 	}
-
-	var picDownloadWg sync.WaitGroup
-	picDownloadWg.Add(1)
-	var picData []byte
-	var picError error
-
-	if config.IfJpg == "是" {
-		go javkit.DownloadPicAsync(10, javInfo.CoverUrl, &config, &picData, &picError, picDownloadWg.Done)
-	} else {
-		picDownloadWg.Done()
-	}
-
-	// 创建归类文件夹
-	newFolderPath := javkit.CreateNewFolder(jav, javInfo, config)
-
-	// 移动影片
-	newVideoPath, err := javkit.RenameAndMoveVideo(jav, javInfo, config, newFolderPath)
-	if err != nil {
-		log(jav.Path, " 移动影片失败，原因：", err.Error())
-		err = os.RemoveAll(newFolderPath)
-		if err != nil {
-			log("删除新建文件夹", newFolderPath, "失败，原因：", err.Error())
-		}
-		return
-	}
-	log(newVideoPath)
-
-	// 创建 nfo
-	if config.IfNfo == "是" {
-		javkit.CreateNfo(newFolderPath, javInfo, config)
-	}
-
-	// 下载图片
-	if config.IfJpg == "是" {
-		fanartRules := strings.Split(config.CustomFanart, "+")
-		var fanartName string
-		for _, rule := range fanartRules {
-			switch rule {
-			case "视频":
-				videoName := strings.Split(filepath.Base(newVideoPath), ".")[0]
-				fanartName += videoName
-			case "-fanart.jpg":
-				fanartName += rule
-			}
-		}
-		fanartPath := filepath.Join(newFolderPath, fanartName)
-
-		picDownloadWg.Wait()
-
-		if picError != nil && picError.Error() != "" {
-			log("下载图片失败，原因：", picError.Error())
-		}
-		err = javkit.SavePic(fanartPath, picData)
-		if err != nil {
-			log(fanartPath, " 保存图片失败，原因：", err.Error())
-		}
-
-		err = javkit.MakePoster(fanartPath)
-		if err != nil {
-			log(fanartPath, " 生成海报失败，原因：", err.Error())
-		}
-	}
-
-	// 创建软链接
-	if config.CreateSymboliclink == "是" && config.SymboliclinkDirectory != "" {
-		fullPath := filepath.Join(filepath.Dir(config.ClassifyRoot), config.SymboliclinkDirectory)
-		javkit.CreateSymlink(fullPath, newFolderPath, javInfo)
-	}
-
-	log(" 完成归类")
+	return javInfo, err
 }

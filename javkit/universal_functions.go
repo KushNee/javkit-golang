@@ -96,16 +96,16 @@ func CreateNfo(path string, javInfo JavInfo, config IniConfig) {
 }
 
 // RenameAndMoveVideo 重命名并移动影片到新的文件夹
-func RenameAndMoveVideo(file JavFile, info JavInfo, config IniConfig, path string) (string, error) {
-	prefix := filepath.Ext(file.Path)
+func RenameAndMoveVideo(videoPath string, info JavInfo, config IniConfig, path string) (string, error) {
+	prefix := filepath.Ext(videoPath)
 	newName := renameVideo(info, config) + prefix
 	newPath := filepath.Join(path, newName)
-	err := os.Rename(file.Path, newPath)
+	err := os.Rename(videoPath, newPath)
 	if err != nil {
 		errString := err.Error()
 		if strings.Contains(errString, "cross-device link") {
-			yellow.Printf("%s -> %s 是一个跨卷移动操作，请耐心等待\n", file.Path, newPath)
-			err = MoveFile(file.Path, newPath)
+			yellow.Printf("%s -> %s 是一个跨卷移动操作，请耐心等待\n", videoPath, newPath)
+			err = MoveFile(videoPath, newPath)
 			if err != nil {
 				return "", err
 			}
@@ -117,7 +117,7 @@ func RenameAndMoveVideo(file JavFile, info JavInfo, config IniConfig, path strin
 }
 
 // CreateNewFolder	对每个 Jav 创建单独的文件夹
-func CreateNewFolder(file JavFile, info JavInfo, config IniConfig) string {
+func CreateNewFolder(path string, info JavInfo, config IniConfig) string {
 	var newFolder string
 	renameRules := strings.Split(config.RenameFolder, "+")
 	for _, rule := range renameRules {
@@ -135,7 +135,7 @@ func CreateNewFolder(file JavFile, info JavInfo, config IniConfig) string {
 	if config.ClassifyRoot != "" {
 		basePath = config.ClassifyRoot
 	} else {
-		basePath = filepath.Dir(file.Path)
+		basePath = filepath.Dir(path)
 	}
 
 	newFolderPath := filepath.Join(basePath, info.LicensePrefix, newFolder)
