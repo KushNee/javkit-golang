@@ -27,7 +27,7 @@ type TomlConfig struct {
 	} `toml:"archive"`
 	Introduction struct {
 		CollectIntroduction bool `toml:"collectIntroduction"`
-	} `toml:introduction`
+	} `toml:"introduction"`
 	Cover struct {
 		DownloadCover bool   `toml:"downloadCover"`
 		FanartPattern string `toml:"fanartPattern"`
