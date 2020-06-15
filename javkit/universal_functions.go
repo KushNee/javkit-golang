@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -175,29 +174,21 @@ func GetJavInfo(url string, config IniConfig) (JavInfo, error) {
 
 	javInfo := CreateDefaultJavInfo()
 
-	libraryError := new(error)
+	err := getJavBusInfo(url, config, &javInfo)
 
-	getJavBusInfo(url, config, &javInfo, libraryError)
-
-	if reflect.ValueOf(libraryError).String() != "" {
-		return javInfo, *libraryError
-	}
-
-	return javInfo, nil
+	return javInfo, err
 }
 
-func getJavBusInfo(url string, config IniConfig, javInfo *JavInfo, busError *error) {
+func getJavBusInfo(url string, config IniConfig, javInfo *JavInfo) error {
 
 	request := makeRequest(&config)
 	javBusHtml, err := request.Get(url)
 	if err != nil {
-		busError = &err
-		return
+		return err
 	}
 	javBusSearch, err := javBusHtml.ToString()
 	if err != nil {
-		busError = &err
-		return
+		return err
 	}
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(javBusSearch))
 
@@ -207,19 +198,16 @@ func getJavBusInfo(url string, config IniConfig, javInfo *JavInfo, busError *err
 		url = singleUrl
 		javBusHtml, err := request.Get(url)
 		if err != nil {
-			busError = &err
-			return
+			return err
 		}
 		javBus, err = javBusHtml.ToString()
 		if err != nil {
-			busError = &err
-			return
+			return err
 		}
 		doc, _ = goquery.NewDocumentFromReader(strings.NewReader(javBus))
 	} else {
 		notFoundError := errors.New("此影片无法在 JavBus 中找到")
-		busError = &notFoundError
-		return
+		return notFoundError
 	}
 
 	title := doc.Find("title").Text()
@@ -280,6 +268,7 @@ func getJavBusInfo(url string, config IniConfig, javInfo *JavInfo, busError *err
 		javInfo.CoverUrl = coverUrl
 	}
 
+	return nil
 }
 
 // getTitleAndLicense	对标题和车牌进行获取和清理
@@ -426,7 +415,7 @@ func GetIniConfig(configType string, path string) (IniConfig, error) {
 
 		proxyConfig := configSource.Section("代理")
 		config.IfProxy = proxyConfig.Key("是否使用代理？").String()
-		config.Proxy = proxyConfig.Key("代理IP及端口").String()
+		config.Proxy = proxyConfig.Key("代理ip及端口").String()
 
 		transConfig := configSource.Section("百度翻译API")
 		config.IfPlot = transConfig.Key("是否需要日语简介？").String()
@@ -490,7 +479,7 @@ func DownloadPicAsync(errorTimes int, picUrl string, config *IniConfig, pPicData
 	}
 	if downloadErr != nil {
 		*pDownloadErr = downloadErr
-		pPicData = nil
+		*pPicData = nil
 	}
 	data, err := response.ToBytes()
 	if err != nil {
@@ -542,11 +531,8 @@ func cutPoster(fanartPath string) (image.Image, error) {
 	}
 
 	poster, err := cutPic(img)
-	if err != nil {
-		return nil, err
-	}
 
-	return poster, nil
+	return poster, err
 
 }
 
