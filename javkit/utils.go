@@ -32,7 +32,7 @@ func GetVideoTitle(name string) (string, error) {
 	return license, nil
 }
 
-// 创建带默认值的 javinfo
+// 创建带默认值的 javInfo
 func CreateDefaultJavInfo() JavInfo {
 	javInfo := JavInfo{
 		License:       "ABC-123",
@@ -89,7 +89,7 @@ func MoveFile(sourcePath, destPath string) error {
 
 	fileInfo, _ := os.Stat(sourcePath)
 	size := int(fileInfo.Size())
-	processBarBuilder := pb.New(size)
+	processBarBuilder := pb.Full.New(size)
 	processBar := processBarBuilder.SetWriter(os.Stdout).Set(pb.SIBytesPrefix, true).Start()
 	proxyReader := processBar.NewProxyReader(inputFile)
 	_, err = io.Copy(outputFile, proxyReader)
