@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/c-bata/go-prompt"
 
@@ -154,18 +154,48 @@ func Delete(config javkit.IniConfig) {
 func Manage(config javkit.IniConfig) {
 
 	fmt.Println("输入后回车选择路径")
+	waitTime := 5
 	for {
 		t := prompt.Input("path > ", javkit.PathCompleter)
 		switch t {
 		case "back":
 			return
 		}
-		mainLogic(t, config)
+		remainNumber, deleteParent := manageLogic(t, config)
+
+		if remainNumber == 0 {
+			if deleteParent {
+				// 删除旧文件夹
+				err := os.RemoveAll(t)
+				if err != nil {
+					fmt.Println(t, " 删除旧文件夹失败，原因：", err.Error())
+					return
+				}
+				fmt.Println("删除 ", t)
+			}
+		} else {
+			fmt.Printf("有 %d 部影片未归类完成，等待 %d 秒后重试\n", remainNumber, waitTime)
+			time.Sleep(time.Duration(waitTime) * time.Second)
+			remainNumber, deleteParent = manageLogic(t, config)
+			if remainNumber == 0 {
+				if deleteParent {
+					// 删除旧文件夹
+					err := os.RemoveAll(t)
+					if err != nil {
+						fmt.Println(t, " 删除旧文件夹失败，原因：", err.Error())
+						return
+					}
+					fmt.Println("删除 ", t)
+				}
+			} else {
+				fmt.Printf("存在 %d 部影片未完成归类\n", remainNumber)
+			}
+		}
 
 	}
 }
 
-func mainLogic(path string, config javkit.IniConfig) {
+func manageLogic(path string, config javkit.IniConfig) (int, bool) {
 
 	rootInfo, err := os.Stat(path)
 	if err != nil {
@@ -182,8 +212,10 @@ func mainLogic(path string, config javkit.IniConfig) {
 	javList := javkit.GetJavFromFolder(path, config)
 
 	if len(javList) == 0 {
-		javkit.PrintWithTime("目录内不存在影片")
-		return
+		fmt.Println("目录内不存在影片")
+		return 0, false
+	} else {
+		fmt.Printf("共找到 %d 部影片\n\n", len(javList))
 	}
 
 	var busUrl string
@@ -209,15 +241,7 @@ func mainLogic(path string, config javkit.IniConfig) {
 	processJav(config, infoMap)
 
 	javEmptyList := javkit.GetJavFromFolder(path, config)
-	if len(javEmptyList) == 0 && deleteParent {
-		// 删除旧文件夹
-		err := os.RemoveAll(path)
-		if err != nil {
-			fmt.Println(path, " 删除旧文件夹失败，原因：", err.Error())
-			return
-		}
-		fmt.Println("删除 ", path)
-	}
+	return len(javEmptyList), deleteParent
 
 }
 
@@ -318,12 +342,5 @@ func getInfo(config javkit.IniConfig, jav javkit.JavFile, searchBaseUrl string) 
 	searchUrl := searchBaseUrl + jav.License
 	// 获取 jav 所有需要的信息
 	javInfo, err := javkit.GetJavInfo(searchUrl, config)
-	if err != nil {
-		return javkit.JavInfo{}, err
-	}
-
-	if javInfo.License == "ABC-123" {
-		return javkit.JavInfo{}, errors.New("不存在影片信息")
-	}
 	return javInfo, err
 }
