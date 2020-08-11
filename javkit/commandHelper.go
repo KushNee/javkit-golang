@@ -14,6 +14,7 @@ func CommandCompleter(d prompt.Document) []prompt.Suggest {
 	input := d.TextBeforeCursor()
 	commandList := []prompt.Suggest{
 		{Text: "manage", Description: "整理"},
+		{Text: "remanage", Description: "再整理"},
 		{Text: "delete", Description: "删除"},
 		{Text: "exit", Description: "退出"},
 	}
